@@ -35,7 +35,26 @@ Author(s): Collin Van Meter, Jadon Milne
 #include <stdlib.h>
 
 
-void main()
+int main()
 {
-    printf("Bussy Queef");
+    FILE *file = fopen("tokens.txt", "r"); // hardcoded filename, readmode
+
+    if (file == NULL) 
+    {
+        printf("Error: cannot open tokens.txt\n");
+        return 1;
+    }
+
+    char tokens[256]; // tokens array to store each line or token
+    while (fgets(tokens, sizeof(tokens), file) != NULL) 
+    {
+        printf("%s", tokens); // Print each line read from the file
+    }
+
+
+
+
+
+    fclose(file); // Close the file
+    return 0;
 }
