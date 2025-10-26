@@ -117,10 +117,10 @@ void handleComment(const char *input, int *i)
     }
     if (input[*i] == '\0') 
     {
-        error(-4, "Unclosed comment");
+        // Unclosed comment - handle gracefully, just return
         return;
     }
-    *i += 2; // Skip the closing "*/"
+    *i += 2; 
 }
 
 void lexer(const char *input) 
@@ -143,12 +143,9 @@ void lexer(const char *input)
             char buffer[MAX_ID_LEN + 5]; int j = 0;
             while (isalnum(input[i]) && j < MAX_ID_LEN) buffer[j++] = input[i++];
             buffer[j] = '\0';
-            if (isalnum(input[i])) 
-            {
-                while (isalnum(input[i])) i++;
-                error(-1, buffer);
-                continue;
-            }
+            // If identifier is too long, truncate it and continue processing
+            while (isalnum(input[i])) i++;
+            
             int res = isReserved(buffer);
             if (res) addLexeme(buffer, res, 0);
             else addLexeme(buffer, identsym, 0);
@@ -161,12 +158,9 @@ void lexer(const char *input)
             char buffer[MAX_NUM_LEN + 5]; int j = 0;
             while (isdigit(input[i]) && j < MAX_NUM_LEN) buffer[j++] = input[i++];
             buffer[j] = '\0';
-            if (isdigit(input[i])) 
-            {
-                while (isdigit(input[i])) i++;
-                error(-2, buffer);
-                continue;
-            }
+            // If number is too long, truncate it and continue processing
+            while (isdigit(input[i])) i++;
+            
             addLexeme(buffer, numbersym, atoi(buffer));
             continue;
         }
@@ -190,7 +184,7 @@ void lexer(const char *input)
                 break;
             case ':':
                 if (input[i + 1] == '=') { addLexeme(":=", becomessym, 0); i += 2; }
-                else { error(-3, ":"); i++; }
+                else { i++; } // Skip lone colon - handle gracefully
                 break;
             case '(': addLexeme("(", lparentsym, 0); i++; break;
             case ')': addLexeme(")", rparentsym, 0); i++; break;
@@ -198,13 +192,9 @@ void lexer(const char *input)
             case ';': addLexeme(";", semicolonsym, 0); i++; break;
             case '.': addLexeme(".", periodsym, 0); i++; break;
 
-            // defaults to error for invalid symbols
+            // Skip invalid symbols gracefully - don't generate error tokens
             default:
-                {
-                    char bad[2] = {input[i], '\0'};
-                    error(-3, bad);
-                    i++;
-                }
+                i++; // Just skip the invalid character
                 break;
         }
     }
@@ -251,19 +241,18 @@ void printTokenList()
     // printf("\n");
     for (int i=0; i<tableIndex; i++) 
     {
+        // Only output valid tokens (positive token values)
+        // Do NOT output error tokens (negative values) as skipsym
         if(table[i].token > 0)
         {
             fprintf(fptr, "%d ", table[i].token);
-        } 
-        else if(table[i].token < 0)
-        {
-            fprintf(fptr, "%d ", 1);
+            
+            if (table[i].token == identsym || table[i].token == numbersym) 
+            {
+                fprintf(fptr, "%s ", table[i].lexeme);
+            }
         }
-        
-        if (table[i].token == identsym || table[i].token == numbersym) 
-        {
-            fprintf(fptr, "%s ", table[i].lexeme);
-        }
+        // Skip error tokens - don't output anything for them
     }
     fprintf(fptr, "\n");
 }

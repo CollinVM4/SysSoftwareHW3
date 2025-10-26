@@ -1,15 +1,15 @@
 /*
-Assignment:
-HW3 - Parser and Code Generator for PL/0
+    Assignment:
+    HW3 - Parser and Code Generator for PL/0
 
-Author(s): Collin Van Meter, Jadon Milne
-    Language: C (only)]
-    
+    Author(s): Collin Van Meter, Jadon Milne
+    Language: C (only)
+        
     To Compile:
         Scanner:
             gcc -O2 -std=c11 -o lex lex.c
-    Parser/Code Generator:
-        gcc -O2 -std=c11 -o parsercodegen parsercodegen.c
+        Parser/Code Generator:
+            gcc -O2 -std=c11 -o parsercodegen parsercodegen.c
     To Execute (on Eustis):
         ./lex <input_file.txt>
         ./parsercodegen
@@ -33,10 +33,65 @@ Author(s): Collin Van Meter, Jadon Milne
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
+// Constants
+#define MAX_SYMBOL_TABLE_SIZE 500
+#define MAX_CODE_LENGTH 1000
+#define MAX_TOKENS 1000
+
+// Struct Definitions
+typedef struct {
+    int kind;        // const = 1, var = 2, proc = 3
+    char name[12];   // symbol name
+    int val;         // value (for constants)
+    int level;       // scope level
+    int addr;        // address
+    int mark;        // marked for deletion
+} symbol;
+
+typedef struct {
+    int op;          // operation code
+    int l;           // lexicographical level
+    int m;           // modifier
+} instruction;
+
+typedef struct {
+    int type;        // token type
+    char name[12];   // identifier name or number string
+    int value;       // numeric value
+} token;
+
+// Global Variables
+symbol symbol_table[MAX_SYMBOL_TABLE_SIZE];
+instruction code[MAX_CODE_LENGTH];
+token token_list[MAX_TOKENS];
+int token_index;
+int code_index;
+int sym_table_size;
+FILE *output;
+token current_token;
+
+// Function Prototypes
+void emit(int op, int l, int m);
+void error(const char *message);
+void getNextToken();
+int findSymbol(char *name);
+void addSymbol(int kind, char *name, int value, int addr);
+
+void program();
+void block();
+void const_declaration();
+int var_declaration();
+void statement();
+void condition();
+void expression();
+void term();
+void factor();
 
 int main()
 {
+ 
     FILE *file = fopen("tokens.txt", "r"); // hardcoded filename, readmode
 
     if (file == NULL) 
