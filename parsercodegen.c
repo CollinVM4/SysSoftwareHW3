@@ -63,21 +63,49 @@ typedef struct {
 } token;
 
 // Global Variables
-symbol symbol_table[MAX_SYMBOL_TABLE_SIZE];
+symbol symbolTable[MAX_SYMBOL_TABLE_SIZE];
 instruction code[MAX_CODE_LENGTH];
-token token_list[MAX_TOKENS];
-int token_index;
-int code_index;
-int sym_table_size;
+token tokenList[MAX_TOKENS];
+int tokenIndex;
+int codeIndex;
+int symTableSize;
 FILE *output;
-token current_token;
+token currentToken;
 
 // Function Prototypes
+void loadTokens();
 void emit(int op, int l, int m);
 void error(const char *message);
 void getNextToken();
 int findSymbol(char *name);
 void addSymbol(int kind, char *name, int value, int addr);
+
+void loadTokens()
+{
+    FILE *file = fopen("tokens.txt", "r");
+    if (file == NULL)
+    {
+        error("Cannot open tokens.txt");
+    }
+
+    int type;
+    char name[12];
+    int value;
+    tokenIndex = 0;
+
+    while (fscanf(file, "%d %s %d", &type, name, &value) == 3)
+    {
+        tokenList[tokenIndex].type = type;
+        strcpy(tokenList[tokenIndex].name, name);
+        tokenList[tokenIndex].value = value;
+        tokenIndex++;
+    }
+
+    fclose(file);
+    tokenIndex = 0;
+    getNextToken();
+}
+
 
 void program();
 void block();
@@ -91,25 +119,8 @@ void factor();
 
 int main()
 {
- 
-    FILE *file = fopen("tokens.txt", "r"); // hardcoded filename, readmode
-
-    if (file == NULL) 
-    {
-        printf("Error: cannot open tokens.txt\n");
-        return 1;
-    }
-
-    char tokens[256]; // tokens array to store each line or token
-    while (fgets(tokens, sizeof(tokens), file) != NULL) 
-    {
-        printf("%s", tokens); // Print each line read from the file
-    }
-
-
-
-
-
-    fclose(file); // Close the file
+    loadTokens();
+    program();
+    
     return 0;
 }
