@@ -74,19 +74,16 @@ token currentToken;
 
 // Function Prototypes
 void loadTokens();
+void getNextToken();
 void emit(int op, int l, int m);
 void error(const char *message);
-void getNextToken();
 int findSymbol(char *name);
 void addSymbol(int kind, char *name, int value, int addr);
 
+// Load tokens from "tokens.txt" into tokenList
 void loadTokens()
 {
     FILE *file = fopen("tokens.txt", "r");
-    if (file == NULL)
-    {
-        error("Cannot open tokens.txt");
-    }
 
     int type;
     char name[12];
@@ -106,6 +103,10 @@ void loadTokens()
     getNextToken();
 }
 
+void getNextToken()
+{
+    currentToken = tokenList[tokenIndex++];
+}
 
 void program();
 void block();
@@ -121,6 +122,6 @@ int main()
 {
     loadTokens();
     program();
-    
+
     return 0;
 }
