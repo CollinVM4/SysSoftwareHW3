@@ -143,8 +143,14 @@ void lexer(const char *input)
             char buffer[MAX_ID_LEN + 5]; int j = 0;
             while (isalnum(input[i]) && j < MAX_ID_LEN) buffer[j++] = input[i++];
             buffer[j] = '\0';
-            // If identifier is too long, truncate it and continue processing
-            while (isalnum(input[i])) i++;
+
+            // If identifier is too long, set to skipsym
+            if (isalnum(input[i])) 
+            {
+                while (isalnum(input[i])) i++; // Skip the rest of the identifier
+                addLexeme(buffer, skipsym, 0); // Mark as skipsym
+                continue;
+            }
             
             int res = isReserved(buffer);
             if (res) addLexeme(buffer, res, 0);
@@ -158,8 +164,14 @@ void lexer(const char *input)
             char buffer[MAX_NUM_LEN + 5]; int j = 0;
             while (isdigit(input[i]) && j < MAX_NUM_LEN) buffer[j++] = input[i++];
             buffer[j] = '\0';
-            // If number is too long, truncate it and continue processing
-            while (isdigit(input[i])) i++;
+
+            // If number is too long, set to skipsym
+            if (isdigit(input[i])) 
+            {
+                while (isdigit(input[i])) i++; // Skip the rest of the number
+                addLexeme(buffer, skipsym, 0); // Mark as skipsym
+                continue;
+            }
             
             addLexeme(buffer, numbersym, atoi(buffer));
             continue;
@@ -194,7 +206,8 @@ void lexer(const char *input)
 
             // Skip invalid symbols gracefully - don't generate error tokens
             default:
-                i++; // Just skip the invalid character
+                addLexeme(&input[i], skipsym, 0); // Mark invalid symbol as skipsym
+                i++; // Move to the next character
                 break;
         }
     }
