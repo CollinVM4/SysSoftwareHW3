@@ -39,11 +39,32 @@
 #define MAX_SYMBOL_TABLE_SIZE 500
 #define MAX_CODE_LENGTH 1000
 #define MAX_TOKENS 1000
+#define MAX_IDENT_LEN 12
+#define MAX_NUMBER_LEN 5
+#define TOKEN_FILENAME "tokens.txt"
+#define CODE_FILENAME "elf.txt"
 
+enum token_type {
+    skipsym = 1, identsym, numbersym, plussym, minussym,
+    multsym, slashsym, eqlsym, neqsym,
+    lessym, leqsym, gtrsym, geqsym, lparentsym,
+    rparentsym, commasym, semicolonsym, periodsym, becomessym,
+    beginsym, endsym, ifsym, fisym, thensym, whilesym,
+    dosym, callsym, constsym, varsym, procsym,
+    writesym, readsym, elsesym, evensym
+};
+
+enum opcode {
+    LIT = 1, OPR, LOD, STO, CAL, INC, JMP, JPC, SYS
+};
+
+enum symbol_kind {
+    CONSTANT = 1, VARIABLE = 2
+};
 // Struct Definitions
 typedef struct {
     int kind;        // const = 1, var = 2, proc = 3
-    char name[12];   // symbol name
+    char name[MAX_IDENT_LEN];   // symbol name
     int val;         // value (for constants)
     int level;       // scope level
     int addr;        // address
@@ -58,70 +79,530 @@ typedef struct {
 
 typedef struct {
     int type;        // token type
-    char name[12];   // identifier name or number string
+    char name[MAX_IDENT_LEN];   // identifier name or number string
     int value;       // numeric value
 } token;
 
 // Global Variables
-symbol symbolTable[MAX_SYMBOL_TABLE_SIZE];
 instruction code[MAX_CODE_LENGTH];
-token tokenList[MAX_TOKENS];
-int tokenIndex;
-int codeIndex;
-int symTableSize;
-FILE *output;
-token currentToken;
+symbol sym_table[MAX_SYMBOL_TABLE_SIZE];
+
+int code_index = 0; // Next available code index
+int sym_index = 0;  // Next available symbol table index
+int token_list[10000]; // Array to hold all tokens
+char token_lexeme[10000][MAX_IDENT_LEN]; // Array to hold lexemes/values
+int token_count = 0; // Total tokens read
+int token_ptr = 0;   // Current token index
+int error_flag = 0;  // Flag to indicate an error has occurred
+FILE *code_file;     // File pointer for elf.txt
+
+// The current token's ID, lexeme/value (used for lookahead/match)
+int current_token;
+char current_lexeme[MAX_IDENT_LEN];
+int current_number_val; // For numbersym
 
 // Function Prototypes
-void loadTokens();
-void getNextToken();
+void read_token_list();
+void advance_token();
 void emit(int op, int l, int m);
-void error(const char *message);
-int findSymbol(char *name);
-void addSymbol(int kind, char *name, int value, int addr);
-
+void error(int code);
+int find_symbol(const char *name, int kind);
+int add_symbol(int kind, const char *name, int val, int level, int addr);
+void print_assembly_code();
+void print_symbol_table();
 // Load tokens from "tokens.txt" into tokenList
-void loadTokens()
+void read_token_list()
 {
-    FILE *file = fopen("tokens.txt", "r");
-
-    int type;
-    char name[12];
-    int value;
-    tokenIndex = 0;
-
-    while (fscanf(file, "%d %s %d", &type, name, &value) == 3)
-    {
-        tokenList[tokenIndex].type = type;
-        strcpy(tokenList[tokenIndex].name, name);
-        tokenList[tokenIndex].value = value;
-        tokenIndex++;
+    FILE *fp = fopen(TOKEN_FILENAME, "r");
+    if (!fp) {
+        fprintf(stderr, "Error: Could not open input file '%s'. Ensure 'lex.c' was run successfully.\n", TOKEN_FILENAME);
+        exit(EXIT_FAILURE);
     }
 
-    fclose(file);
-    tokenIndex = 0;
-    getNextToken();
+    // Use fscanf to read mixed data types from the single line of space-separated tokens
+    while (!feof(fp)) {
+        int token_id = 0;
+        char lexeme_buffer[MAX_IDENT_LEN];
+        
+        // Try to read the token ID (must be an integer)
+        if (fscanf(fp, "%d", &token_id) != 1) {
+            // End of file or unexpected non-integer data
+            break;
+        }
+
+        token_list[token_count] = token_id;
+
+        // Check if the token type requires an associated value/lexeme
+        if (token_id == identsym) {
+            if (fscanf(fp, "%s", lexeme_buffer) == 1) {
+                strncpy(token_lexeme[token_count], lexeme_buffer, MAX_IDENT_LEN);
+            }
+        } else if (token_id == numbersym) {
+            int num_val;
+            if (fscanf(fp, "%d", &num_val) == 1) {
+                // Store the numeric value as a string for simplicity in the global array
+                sprintf(token_lexeme[token_count], "%d", num_val);
+            }
+        } else {
+            // For symbols/keywords, store an empty string
+            strcpy(token_lexeme[token_count], "");
+        }
+        
+        token_count++;
+        if (token_count >= MAX_TOKENS) break;
+    }
+
+    fclose(fp);
 }
 
-void getNextToken()
-{
-    currentToken = tokenList[tokenIndex++];
+void advance_token() {
+    if (error_flag) return;
+
+    if (token_ptr < token_count) {
+        current_token = token_list[token_ptr];
+        
+        if (current_token == skipsym) {
+            error_flag = 1;
+            error(1);
+            return;
+        }
+
+        strncpy(current_lexeme, token_lexeme[token_ptr], MAX_IDENT_LEN);
+        current_lexeme[MAX_IDENT_LEN-1] = '\0';
+
+        if (current_token == numbersym) {
+            current_number_val = atoi(current_lexeme);
+        } else {
+            current_number_val = 0;
+        }
+
+        token_ptr++;
+    } else {
+        current_token = skipsym;
+        strcpy(current_lexeme, "");
+        current_number_val = 0;
+    }
 }
 
-void program();
-void block();
-void const_declaration();
-int var_declaration();
-void statement();
-void condition();
-void expression();
-void term();
-void factor();
+void error(int code) {
+    if (error_flag) return;
+    error_flag = 1;
+    char *msg;
+    switch (code) {
+        case 1:  msg = "Error: Scanning error detected by lexer (skipsym present)"; break;
+        case 2:  msg = "Error: const, var, and read keywords must be followed by identifier"; break;
+        case 3:  msg = "Error: symbol name has already been declared"; break;
+        case 4:  msg = "Error: constants must be assigned with ="; break;
+        case 5:  msg = "Error: constants must be assigned an integer value"; break;
+        case 6:  msg = "Error: constant and variable declarations must be followed by a semicolon"; break;
+        case 7:  msg = "Error: undeclared identifier"; break;
+        case 8:  msg = "Error: only variable values may be altered"; break;
+        case 9:  msg = "Error: assignment statements must use :="; break;
+        case 10: msg = "Error: begin must be followed by end"; break;
+        case 11: msg = "Error: if must be followed by then"; break;
+        case 12: msg = "Error: while must be followed by do"; break;
+        case 13: msg = "Error: condition must contain comparison operator"; break;
+        case 14: msg = "Error: right parenthesis must follow left parenthesis"; break;
+        case 15: msg = "Error: arithmetic equations must contain operands, parentheses, numbers, or symbols"; break;
+        case 16: msg = "Error: program must end with period"; break;
+        default: msg = "Error: Unknown error occurred"; break;
+    }
 
-int main()
-{
-    loadTokens();
+    fprintf(stderr, "%s\n", msg);
+    fprintf(code_file, "%s\n", msg);
+    fclose(code_file);
+    exit(EXIT_SUCCESS);
+}
+
+void emit(int op, int l, int m) {
+    if (code_index >= MAX_CODE_LENGTH) {
+        fprintf(stderr, "Error: Code array overflow.\n");
+        exit(EXIT_FAILURE);
+    }
+    code[code_index].op = op;
+    code[code_index].l = l;
+    code[code_index].m = m;
+    code_index++;
+}
+
+void print_assembly_code() {
+    char *opname[] = {"", "LIT", "OPR", "LOD", "STO", "CAL", "INC", "JMP", "JPC", "SYS"};
+    
+    printf("\nGenerated Assembly Code:\n");
+    for (int i = 0; i < code_index; i++) {
+        printf("%3d %s %d %d\n", i, opname[code[i].op], code[i].l, code[i].m);
+    }
+}
+
+void print_symbol_table() {
+    printf("\nSymbol Table:\n");
+    printf("Kind | Name        | Value | Level | Address\n");
+    printf("-----|-------------|-------|-------|--------\n");
+    for (int i = 0; i < sym_index; i++) {
+        printf("%4d | %-11s | %5d | %5d | %7d\n", 
+               sym_table[i].kind, sym_table[i].name, sym_table[i].val, 
+               sym_table[i].level, sym_table[i].addr);
+    }
+    printf("\n");
+}
+
+void write_code_to_file() {
+    for (int i = 0; i < code_index; i++) {
+        fprintf(code_file, "%d %d %d\n", code[i].op, code[i].l, code[i].m);
+    }
+}
+
+
+int find_symbol(const char *name, int kind) {
+    // Note: The level check is simplified since level is always 0 in HW3
+    for (int i = sym_index - 1; i >= 0; i--) {
+        if (strcmp(sym_table[i].name, name) == 0) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+int add_symbol(int kind, const char *name, int val, int level, int addr) {
+    if (sym_index >= MAX_SYMBOL_TABLE_SIZE) {
+        fprintf(stderr, "Error: Symbol table overflow.\n");
+        return -1;
+    }
+    if (find_symbol(name, level) != -1) {
+        error(3);
+        return -1;
+    }
+
+    sym_table[sym_index].kind = kind;
+    strncpy(sym_table[sym_index].name, name, MAX_IDENT_LEN);
+    sym_table[sym_index].name[MAX_IDENT_LEN - 1] = '\0';
+    sym_table[sym_index].val = val;
+    sym_table[sym_index].level = level;
+    sym_table[sym_index].addr = addr;
+
+    return sym_index++;
+}
+
+void program() {
+    emit(JMP, 0, 0);
+    
+    int data_size;
+    block(0, &data_size);
+
+    if (current_token != periodsym) {
+        error(16);
+    }
+    
+    emit(SYS, 0, 3);
+    
+    code[0].m = code_index; 
+}
+
+void block(int level, int *data_size) {
+    *data_size = 3; 
+    const_declaration(level);
+    var_declaration(level, data_size);
+
+    emit(INC, 0, *data_size);
+
+    statement(level);
+}
+
+void const_declaration(int level) {
+    if (current_token == constsym) {
+        advance_token();
+        
+        do {
+            if (current_token != identsym) {
+                error(2);
+            }
+            char ident_name[MAX_IDENT_LEN];
+            strcpy(ident_name, current_lexeme);
+            advance_token();
+
+            if (current_token != eqlsym) {
+                error(4);
+            }
+            advance_token();
+
+            if (current_token != numbersym) {
+                error(5);
+            }
+            int val = current_number_val;
+            
+            add_symbol(CONSTANT, ident_name, val, level, 0);
+            
+            advance_token();
+            
+        } while (current_token == commasym && (advance_token(), 1));
+
+        if (current_token != semicolonsym) {
+            error(6);
+        }
+        advance_token();
+    }
+}
+
+void var_declaration(int level, int *data_size) {
+    if (current_token == varsym) {
+        advance_token();
+        
+        do {
+            if (current_token != identsym) {
+                error(2);
+            }
+            
+            add_symbol(VARIABLE, current_lexeme, 0, level, *data_size);
+            (*data_size)++;
+            
+            advance_token();
+            
+        } while (current_token == commasym && (advance_token(), 1));
+
+        if (current_token != semicolonsym) {
+            error(6);
+        }
+        advance_token();
+    }
+}
+
+void statement(int level) {
+    int sym_idx;
+    int cx1, cx2;
+
+    if (current_token == identsym) {
+        char ident_name[MAX_IDENT_LEN];
+        strcpy(ident_name, current_lexeme);
+        sym_idx = find_symbol(ident_name, level);
+
+        if (sym_idx == -1) {
+            error(7);
+        }
+        if (sym_table[sym_idx].kind != VARIABLE) {
+            error(8);
+        }
+
+        advance_token();
+        
+        if (current_token != becomessym) {
+            error(9);
+        }
+        advance_token();
+
+        expression(level);
+        
+        emit(STO, level - sym_table[sym_idx].level, sym_table[sym_idx].addr);
+
+    } else if (current_token == readsym) {
+        advance_token();
+        if (current_token != identsym) {
+            error(2);
+        }
+        
+        sym_idx = find_symbol(current_lexeme, level);
+        if (sym_idx == -1) {
+            error(7);
+        }
+        if (sym_table[sym_idx].kind != VARIABLE) {
+            error(8);
+        }
+        
+        emit(SYS, 0, 2);
+        emit(STO, level - sym_table[sym_idx].level, sym_table[sym_idx].addr);
+        advance_token();
+
+    } else if (current_token == writesym) {
+        advance_token();
+        expression(level);
+        emit(SYS, 0, 1);
+
+    } else if (current_token == beginsym) {
+        advance_token();
+        statement(level);
+        
+        while (current_token == semicolonsym) {
+            advance_token();
+            statement(level);
+        }
+
+        if (current_token != endsym) {
+            error(10);
+        }
+        advance_token();
+
+    } else if (current_token == ifsym) {
+        advance_token();
+        condition(level);
+
+        if (current_token != thensym) {
+            error(11);
+        }
+        advance_token();
+
+        cx1 = code_index;
+        emit(JPC, 0, 0); 
+        
+        statement(level);
+        
+        code[cx1].m = code_index;
+
+        if (current_token != fisym) {
+            error(32);
+        }
+        advance_token();
+
+    } else if (current_token == whilesym) {
+        advance_token();
+        
+        cx1 = code_index;
+        condition(level);
+        
+        if (current_token != dosym) {
+            error(12);
+        }
+        advance_token();
+        
+        cx2 = code_index;
+        emit(JPC, 0, 0); 
+        
+        statement(level);
+        
+        emit(JMP, 0, cx1);
+        
+        code[cx2].m = code_index;
+    }
+}
+
+void condition(int level) {
+    if (current_token == skipsym) {
+        advance_token();
+        expression(level);
+        emit(OPR, 0, 6);
+    } else {
+        expression(level);
+        
+        int rel_op = current_token;
+        if (rel_op < eqlsym || rel_op > geqsym) {
+            error(13);
+        }
+        advance_token();
+
+        expression(level);
+
+        switch (rel_op) {
+            case eqlsym:  emit(OPR, 0, 8); break;
+            case neqsym: emit(OPR, 0, 9); break;
+            case lessym: emit(OPR, 0, 10); break;
+            case leqsym: emit(OPR, 0, 11); break;
+            case gtrsym: emit(OPR, 0, 12); break;
+            case geqsym: emit(OPR, 0, 13); break;
+        }
+    }
+}
+
+void expression(int level) {
+    int op;
+    if (current_token == plussym || current_token == minussym) {
+        op = current_token;
+        advance_token();
+        term(level);
+        if (op == minussym) {
+            emit(OPR, 0, 1);
+        }
+    } else {
+        term(level);
+    }
+
+    while (current_token == plussym || current_token == minussym) {
+        op = current_token;
+        advance_token();
+        term(level);
+        if (op == plussym) {
+            emit(OPR, 0, 2);
+        } else {
+            emit(OPR, 0, 3);
+        }
+    }
+}
+
+void term(int level) {
+    int op;
+    factor(level);
+
+    while (current_token == multsym || current_token == slashsym) {
+        op = current_token;
+        advance_token();
+        factor(level);
+        if (op == multsym) {
+            emit(OPR, 0, 4);
+        } else {
+            emit(OPR, 0, 5);
+        }
+    }
+}
+
+void factor(int level) {
+    int sym_idx;
+    if (current_token == identsym) {
+        sym_idx = find_symbol(current_lexeme, level);
+        if (sym_idx == -1) {
+            error(7);
+        }
+        
+        if (sym_table[sym_idx].kind == CONSTANT) {
+            emit(LIT, 0, sym_table[sym_idx].val);
+        } else if (sym_table[sym_idx].kind == VARIABLE) {
+            emit(LOD, level - sym_table[sym_idx].level, sym_table[sym_idx].addr);
+        }
+
+        advance_token();
+    } else if (current_token == numbersym) {
+        emit(LIT, 0, current_number_val);
+        advance_token();
+    } else if (current_token == lparentsym) {
+        advance_token();
+        expression(level);
+        if (current_token != rparentsym) {
+            error(14);
+        }
+        advance_token();
+    } else {
+        error(15);
+    }
+}
+
+// --- MAIN FUNCTION ---
+
+int main(void) {
+    code_file = fopen(CODE_FILENAME, "w");
+    if (!code_file) {
+        fprintf(stderr, "Error: Could not open output file '%s'.\n", CODE_FILENAME);
+        return EXIT_FAILURE;
+    }
+
+    read_token_list();
+    if (token_count == 0) {
+        fprintf(stderr, "Error: Token input file '%s' is empty or invalid.\n", TOKEN_FILENAME);
+        fprintf(code_file, "Error: Token input file '%s' is empty or invalid.\n", TOKEN_FILENAME);
+        fclose(code_file);
+        return EXIT_SUCCESS;
+    }
+
+    advance_token();
+    
+    if (current_token == skipsym) {
+        error(1); 
+    }
+
     program();
 
-    return 0;
+    if (!error_flag) {
+        print_symbol_table();
+        print_assembly_code();
+        write_code_to_file();
+        printf("Parsing and code generation successful. Output written to %s.\n", CODE_FILENAME);
+    }
+
+    fclose(code_file);
+    return EXIT_SUCCESS;
 }
