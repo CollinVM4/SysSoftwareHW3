@@ -118,6 +118,8 @@ void condition(int level);
 void expression(int level);
 void term(int level);
 void factor(int level);
+
+
 // Load tokens from "tokens.txt" into tokenList
 void read_token_list()
 {
@@ -127,41 +129,36 @@ void read_token_list()
         exit(EXIT_FAILURE);
     }
 
-    // Use fscanf to read mixed data types from the single line of space-separated tokens
-    while (!feof(fp)) {
-        int token_id = 0;
-        char lexeme_buffer[MAX_IDENT_LEN];
-        
-        // Try to read the token ID (must be an integer)
-        if (fscanf(fp, "%d", &token_id) != 1) {
-            // End of file or unexpected non-integer data
-            break;
-        }
+    token_count = 0;
 
-        token_list[token_count] = token_id;
+    // Loop until we can't read another token ID
+    while (fscanf(fp, "%d", &token_list[token_count]) == 1) {
+        int token_id = token_list[token_count];
+        token_lexeme[token_count][0] = '\0'; // initialize
 
-        // Check if the token type requires an associated value/lexeme
         if (token_id == identsym) {
-            if (fscanf(fp, "%s", lexeme_buffer) == 1) {
-                strncpy(token_lexeme[token_count], lexeme_buffer, MAX_IDENT_LEN);
+            if (fscanf(fp, "%s", token_lexeme[token_count]) != 1) {
+                fprintf(stderr, "Error: Expected identifier after identsym at token %d\n", token_count);
+                break;
             }
-        } else if (token_id == numbersym) {
-            int num_val;
-            if (fscanf(fp, "%d", &num_val) == 1) {
-                // Store the numeric value as a string for simplicity in the global array
-                sprintf(token_lexeme[token_count], "%d", num_val);
-            }
-        } else {
-            // For symbols/keywords, store an empty string
-            strcpy(token_lexeme[token_count], "");
         }
-        
+        else if (token_id == numbersym) {
+            int num_val;
+            if (fscanf(fp, "%d", &num_val) != 1) {
+                fprintf(stderr, "Error: Expected number after numbersym at token %d\n", token_count);
+                break;
+            }
+            snprintf(token_lexeme[token_count], MAX_IDENT_LEN, "%d", num_val);
+        }
+
         token_count++;
         if (token_count >= MAX_TOKENS) break;
     }
 
     fclose(fp);
 }
+
+
 
 void advance_token() {
     if (error_flag) return;
@@ -561,6 +558,7 @@ void factor(int level) {
             emit(LIT, 0, sym_table[sym_idx].val);
         } else if (sym_table[sym_idx].kind == VARIABLE) {
             emit(LOD, level - sym_table[sym_idx].level, sym_table[sym_idx].addr);
+            // advance_token();
         }
 
         advance_token();
@@ -589,6 +587,11 @@ int main(void) {
     }
 
     read_token_list();
+    printf("Tokens loaded:\n");
+    for (int i = 0; i < token_count; i++) {
+        printf("%2d: token=%2d lexeme='%s'\n", i, token_list[i], token_lexeme[i]);
+    }
+
     if (token_count == 0) {
         fprintf(stderr, "Error: Token input file '%s' is empty or invalid.\n", TOKEN_FILENAME);
         fprintf(code_file, "Error: Token input file '%s' is empty or invalid.\n", TOKEN_FILENAME);
