@@ -110,6 +110,14 @@ int find_symbol(const char *name, int kind);
 int add_symbol(int kind, const char *name, int val, int level, int addr);
 void print_assembly_code();
 void print_symbol_table();
+void block(int level, int *data_size);
+void const_declaration(int level);
+void var_declaration(int level, int *data_size);
+void statement(int level);
+void condition(int level);
+void expression(int level);
+void term(int level);
+void factor(int level);
 // Load tokens from "tokens.txt" into tokenList
 void read_token_list()
 {
