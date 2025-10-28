@@ -1,0 +1,7 @@
+var x;
+begin
+if x = 5 then 
+begin
+x := 10;
+end;
+end .

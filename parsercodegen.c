@@ -210,6 +210,7 @@ void error(int code) {
         case 14: msg = "Error: right parenthesis must follow left parenthesis"; break;
         case 15: msg = "Error: arithmetic equations must contain operands, parentheses, numbers, or symbols"; break;
         case 16: msg = "Error: program must end with period"; break;
+        case 32: msg = "Error: if must be followed by fi"; break;
         default: msg = "Error: Unknown error occurred"; break;
     }
 

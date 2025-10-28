@@ -61,18 +61,19 @@ typedef struct
 
 const char *reserved[] = 
 {
-    "const","var","procedure","call","begin","end","if","then",
+    "const","var","procedure","call","begin","end","if","fi","then",
     "else","while","do","read","write","odd"
 };
 
 const int reservedTokens[] = 
 {
     constsym, varsym, procsym, callsym, beginsym, endsym,
-    ifsym, thensym, elsesym, whilesym, dosym,
+    ifsym, fisym, thensym, elsesym, whilesym, dosym,
+    readsym, writesym, evensym
 };
 
 
-const int numReserved = 14;
+const int numReserved = 15;
 char source[MAX_SOURCE_SIZE];
 lexeme table[MAX_LEXEMES];
 int tableIndex = 0;
