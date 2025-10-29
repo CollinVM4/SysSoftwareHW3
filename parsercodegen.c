@@ -260,21 +260,30 @@ void write_code_to_file() {
 
 
 int find_symbol(const char *name, int kind) {
+
+            printf("Sym Index before: %d\n", sym_index);
+
     // Note: The level check is simplified since level is always 0 in HW3
     for (int i = sym_index - 1; i >= 0; i--) {
+        printf("Sym Name During %s\n", sym_table[i].name);
+        printf("Sym Index During %d\n", sym_index);
+        printf("comparing symtable %s and passed name %s\n", sym_table[i].name, name);
         if (strcmp(sym_table[i].name, name) == 0) {
             return i;
         }
     }
+    printf("returning -1 from find_symbol\n");
     return -1;
 }
 
 int add_symbol(int kind, const char *name, int val, int level, int addr) {
+    printf("adding symbol: %s\n", name);
     if (sym_index >= MAX_SYMBOL_TABLE_SIZE) {
         fprintf(stderr, "Error: Symbol table overflow.\n");
         return -1;
     }
     if (find_symbol(name, level) != -1) {
+        printf("hit error 3\n");
         error(3);
         return -1;
     }
@@ -286,6 +295,7 @@ int add_symbol(int kind, const char *name, int val, int level, int addr) {
     sym_table[sym_index].level = level;
     sym_table[sym_index].addr = addr;
 
+    printf("incrementing sym index\n");
     return sym_index++;
 }
 
@@ -336,6 +346,7 @@ void const_declaration(int level) {
             }
             int val = current_number_val;
             
+            printf("Adding constant: %s = %d\n", ident_name, val);
             add_symbol(CONSTANT, ident_name, val, level, 0);
             
             advance_token();
@@ -358,6 +369,7 @@ void var_declaration(int level, int *data_size) {
                 error(2);
             }
             
+            printf("Adding variable: %s at address %d\n", current_lexeme, *data_size);
             add_symbol(VARIABLE, current_lexeme, 0, level, *data_size);
             (*data_size)++;
             
@@ -380,6 +392,7 @@ void statement(int level) {
         char ident_name[MAX_IDENT_LEN];
         strcpy(ident_name, current_lexeme);
         sym_idx = find_symbol(ident_name, level);
+        printf("sym_idx for %s: %d\n", ident_name, sym_idx);
 
         if (sym_idx == -1) {
             error(7);
