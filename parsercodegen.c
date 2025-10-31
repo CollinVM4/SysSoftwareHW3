@@ -65,7 +65,7 @@ enum symbol_kind {
 typedef struct {
     int kind;        // const = 1, var = 2, proc = 3
     char name[MAX_IDENT_LEN];   // symbol name
-    int val;         // value (for constants)
+    int val;         // value for constants
     int level;       // scope level
     int addr;        // address
     int mark;        // marked for deletion
@@ -96,7 +96,7 @@ int token_ptr = 0;   // Current token index
 int error_flag = 0;  // Flag to indicate an error has occurred
 FILE *code_file;     // File pointer for elf.txt
 
-// The current token's ID, lexeme/value (used for lookahead/match)
+// The current token's ID, lexeme/value, and numeric value (if applicable)
 int current_token;
 char current_lexeme[MAX_IDENT_LEN];
 int current_number_val; // For numbersym
@@ -159,7 +159,7 @@ void read_token_list()
 }
 
 
-
+// Advance to the next token in the token list
 void advance_token() {
     if (error_flag) return;
 
@@ -188,35 +188,35 @@ void advance_token() {
         current_number_val = 0;
     }
 }
-
+// Error handling function
 void error(int code) {
     if (error_flag) return;
     error_flag = 1;
     char *msg;
     switch (code) {
-        case 1:  msg = "Error: Scanning error detected by lexer (skipsym present)"; break;
-        case 2:  msg = "Error: const, var, and read keywords must be followed by identifier"; break;
-        case 3:  msg = "Error: symbol name has already been declared"; break;
-        case 4:  msg = "Error: constants must be assigned with ="; break;
-        case 5:  msg = "Error: constants must be assigned an integer value"; break;
-        case 6:  msg = "Error: constant and variable declarations must be followed by a semicolon"; break;
-        case 7:  msg = "Error: undeclared identifier"; break;
-        case 8:  msg = "Error: only variable values may be altered"; break;
-        case 9:  msg = "Error: assignment statements must use :="; break;
-        case 10: msg = "Error: begin must be followed by end"; break;
-        case 11: msg = "Error: if must be followed by then"; break;
-        case 12: msg = "Error: while must be followed by do"; break;
-        case 13: msg = "Error: condition must contain comparison operator"; break;
-        case 14: msg = "Error: right parenthesis must follow left parenthesis"; break;
-        case 15: msg = "Error: arithmetic equations must contain operands, parentheses, numbers, or symbols"; break;
-        case 16: msg = "Error: program must end with period"; break;
-        case 32: msg = "Error: if must be followed by fi"; break;
-        default: msg = "Error: Unknown error occurred"; break;
+        case 1:  msg = "Error: Scanning error detected by lexer (skipsym present)"; break; // lexer error
+        case 2:  msg = "Error: const, var, and read keywords must be followed by identifier"; break; // identifier expected
+        case 3:  msg = "Error: symbol name has already been declared"; break; // duplicate symbol
+        case 4:  msg = "Error: constants must be assigned with ="; break; // '=' expected
+        case 5:  msg = "Error: constants must be assigned an integer value"; break; // number expected
+        case 6:  msg = "Error: constant and variable declarations must be followed by a semicolon"; break; // semicolon expected
+        case 7:  msg = "Error: undeclared identifier"; break; // undeclared identifier
+        case 8:  msg = "Error: only variable values may be altered"; break; // assignment to non-variable
+        case 9:  msg = "Error: assignment statements must use :="; break;// ':=' expected
+        case 10: msg = "Error: begin must be followed by end"; break;// 'end' expected
+        case 11: msg = "Error: if must be followed by then"; break;// 'then' expected
+        case 12: msg = "Error: while must be followed by do"; break;// 'do' expected
+        case 13: msg = "Error: condition must contain comparison operator"; break;// relational operator expected
+        case 14: msg = "Error: right parenthesis must follow left parenthesis"; break;// ')' expected
+        case 15: msg = "Error: arithmetic equations must contain operands, parentheses, numbers, or symbols"; break;// factor expected
+        case 16: msg = "Error: program must end with period"; break;// '.' expected
+        case 32: msg = "Error: if must be followed by fi"; break;// 'fi' expected
+        default: msg = "Error: Unknown error occurred"; break;// unknown error
     }
 
-    fprintf(stderr, "%s\n", msg);
-    fprintf(code_file, "%s\n", msg);
-    fclose(code_file);
+    fprintf(stderr, "%s\n", msg);// Print to stderr
+    fprintf(code_file, "%s\n", msg);// Print to elf.txt
+    fclose(code_file);// Close output file
     exit(EXIT_SUCCESS);
 }
 
@@ -361,6 +361,7 @@ void const_declaration(int level) {
 }
 
 void var_declaration(int level, int *data_size) {
+    // Handle variable declarations
     if (current_token == varsym) {
         advance_token();
         
@@ -369,7 +370,6 @@ void var_declaration(int level, int *data_size) {
                 error(2);
             }
             
-            printf("Adding variable: %s at address %d\n", current_lexeme, *data_size);
             add_symbol(VARIABLE, current_lexeme, 0, level, *data_size);
             (*data_size)++;
             
@@ -383,11 +383,11 @@ void var_declaration(int level, int *data_size) {
         advance_token();
     }
 }
-
+// --- PARSER FUNCTIONS ---
 void statement(int level) {
     int sym_idx;
     int cx1, cx2;
-
+    // Handle different statement types
     if (current_token == identsym) {
         char ident_name[MAX_IDENT_LEN];
         strcpy(ident_name, current_lexeme);
@@ -411,8 +411,7 @@ void statement(int level) {
         expression(level);
         
         emit(STO, level - sym_table[sym_idx].level, sym_table[sym_idx].addr);
-
-    } else if (current_token == readsym) {
+    } else if (current_token == readsym) {// read statement
         advance_token();
         if (current_token != identsym) {
             error(2);
@@ -430,12 +429,12 @@ void statement(int level) {
         emit(STO, level - sym_table[sym_idx].level, sym_table[sym_idx].addr);
         advance_token();
 
-    } else if (current_token == writesym) {
+    } else if (current_token == writesym) {// write statement
         advance_token();
         expression(level);
         emit(SYS, 0, 1);
 
-    } else if (current_token == beginsym) {
+    } else if (current_token == beginsym) {// begin...end block
         advance_token();
         statement(level);
         
@@ -449,7 +448,7 @@ void statement(int level) {
         }
         advance_token();
 
-    } else if (current_token == ifsym) {
+    } else if (current_token == ifsym) {// if...then...fi statement
         advance_token();
         condition(level);
 
@@ -470,7 +469,7 @@ void statement(int level) {
         }
         advance_token();
 
-    } else if (current_token == whilesym) {
+    } else if (current_token == whilesym) {// while...do statement
         advance_token();
         
         cx1 = code_index;
@@ -498,16 +497,17 @@ void condition(int level) {
         expression(level);
         emit(OPR, 0, 6);
     } else {
-        expression(level);
+        expression(level); // left-hand side
         
         int rel_op = current_token;
         if (rel_op < eqlsym || rel_op > geqsym) {
             error(13);
         }
-        advance_token();
+        advance_token(); // consume relational operator
 
-        expression(level);
+        expression(level); // right-hand side
 
+        // Emit appropriate OPR instruction based on relational operator
         switch (rel_op) {
             case eqlsym:  emit(OPR, 0, 8); break;
             case neqsym: emit(OPR, 0, 9); break;
@@ -521,6 +521,7 @@ void condition(int level) {
 
 void expression(int level) {
     int op;
+    // Handle optional leading + or -
     if (current_token == plussym || current_token == minussym) {
         op = current_token;
         advance_token();
@@ -531,7 +532,7 @@ void expression(int level) {
     } else {
         term(level);
     }
-
+    // Handle addition and subtraction
     while (current_token == plussym || current_token == minussym) {
         op = current_token;
         advance_token();
@@ -547,7 +548,7 @@ void expression(int level) {
 void term(int level) {
     int op;
     factor(level);
-
+    // Handle multiplication and division
     while (current_token == multsym || current_token == slashsym) {
         op = current_token;
         advance_token();
@@ -562,12 +563,13 @@ void term(int level) {
 
 void factor(int level) {
     int sym_idx;
+    // Handle identifier, number, or parenthesized expression
     if (current_token == identsym) {
         sym_idx = find_symbol(current_lexeme, level);
         if (sym_idx == -1) {
             error(7);
         }
-        
+        // Load constant or variable value
         if (sym_table[sym_idx].kind == CONSTANT) {
             emit(LIT, 0, sym_table[sym_idx].val);
         } else if (sym_table[sym_idx].kind == VARIABLE) {
@@ -594,18 +596,19 @@ void factor(int level) {
 // --- MAIN FUNCTION ---
 
 int main(void) {
-    code_file = fopen(CODE_FILENAME, "w");
-    if (!code_file) {
+    code_file = fopen(CODE_FILENAME, "w"); // Open output file
+    if (!code_file) { // Check for file open error
         fprintf(stderr, "Error: Could not open output file '%s'.\n", CODE_FILENAME);
         return EXIT_FAILURE;
     }
 
-    read_token_list();
+    read_token_list(); // Load tokens from file
     printf("Tokens loaded:\n");
+    // Print loaded tokens for debugging
     for (int i = 0; i < token_count; i++) {
         printf("%2d: token=%2d lexeme='%s'\n", i, token_list[i], token_lexeme[i]);
     }
-
+    // Check if any tokens were read
     if (token_count == 0) {
         fprintf(stderr, "Error: Token input file '%s' is empty or invalid.\n", TOKEN_FILENAME);
         fprintf(code_file, "Error: Token input file '%s' is empty or invalid.\n", TOKEN_FILENAME);
@@ -613,13 +616,13 @@ int main(void) {
         return EXIT_SUCCESS;
     }
 
-    advance_token();
+    advance_token(); // Initialize first token
     
     if (current_token == skipsym) {
         error(1); 
     }
 
-    program();
+    program(); // Start parsing
 
     if (!error_flag) {
         print_symbol_table();
@@ -628,6 +631,6 @@ int main(void) {
         printf("Parsing and code generation successful. Output written to %s.\n", CODE_FILENAME);
     }
 
-    fclose(code_file);
+    fclose(code_file); //Finished wooooo
     return EXIT_SUCCESS;
 }
