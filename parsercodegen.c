@@ -31,6 +31,7 @@
     Due Date: Friday, October 31, 2025 at 11:59 PM ET
 */
 
+// Libraries
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -44,6 +45,7 @@
 #define TOKEN_FILENAME "tokens.txt"
 #define CODE_FILENAME "elf.txt"
 
+// Enum Definitions
 enum token_type {
     skipsym = 1, identsym, numbersym, plussym, minussym,
     multsym, slashsym, eqlsym, neqsym,
@@ -61,6 +63,7 @@ enum opcode {
 enum symbol_kind {
     CONSTANT = 1, VARIABLE = 2
 };
+
 // Struct Definitions
 typedef struct {
     int kind;        // const = 1, var = 2, proc = 3
@@ -220,74 +223,86 @@ void error(int code) {
     exit(EXIT_SUCCESS);
 }
 
+// function to emit instructions
 void emit(int op, int l, int m) {
     if (code_index >= MAX_CODE_LENGTH) {
         fprintf(stderr, "Error: Code array overflow.\n");
         exit(EXIT_FAILURE);
     }
+    // Add instruction to code array
     code[code_index].op = op;
     code[code_index].l = l;
     code[code_index].m = m;
-    code_index++;
+    code_index++; // increment code index
 }
 
+
+// function to print assembly code
 void print_assembly_code() {
+    // mnemonic def for opcodes
     char *opname[] = {"", "LIT", "OPR", "LOD", "STO", "CAL", "INC", "JMP", "JPC", "SYS"};
     
-    printf("\nGenerated Assembly Code:\n");
+    // printf("\nGenerated Assembly Code:\n");
+    // loop through code array and print instructions
     for (int i = 0; i < code_index; i++) {
         printf("%3d %s %d %d\n", i, opname[code[i].op], code[i].l, code[i].m);
     }
 }
 
+
+// function to print symbol table
 void print_symbol_table() {
+    // symbol table header
     printf("\nSymbol Table:\n");
     printf("Kind | Name        | Value | Level | Address\n");
     printf("-----|-------------|-------|-------|--------\n");
+
+    //loop through symbol table and print entries
     for (int i = 0; i < sym_index; i++) {
-        printf("%4d | %-11s | %5d | %5d | %7d\n", 
+        printf("%4d | %-11s | %5d | %5d | %7d\n", // formatting/alignment
                sym_table[i].kind, sym_table[i].name, sym_table[i].val, 
                sym_table[i].level, sym_table[i].addr);
     }
     printf("\n");
 }
 
+
+// writes to elf.txt
 void write_code_to_file() {
+    // loop through code array and write instructions elf.txt
     for (int i = 0; i < code_index; i++) {
         fprintf(code_file, "%d %d %d\n", code[i].op, code[i].l, code[i].m);
     }
 }
 
 
+// function to find symbol in symbol table
 int find_symbol(const char *name, int kind) {
-
-            printf("Sym Index before: %d\n", sym_index);
-
     // Note: The level check is simplified since level is always 0 in HW3
     for (int i = sym_index - 1; i >= 0; i--) {
-        printf("Sym Name During %s\n", sym_table[i].name);
-        printf("Sym Index During %d\n", sym_index);
-        printf("comparing symtable %s and passed name %s\n", sym_table[i].name, name);
         if (strcmp(sym_table[i].name, name) == 0) {
             return i;
         }
     }
-    printf("returning -1 from find_symbol\n");
-    return -1;
+    return -1; // not found
 }
 
+
+// function to add symbol to symbol table
 int add_symbol(int kind, const char *name, int val, int level, int addr) {
-    printf("adding symbol: %s\n", name);
+
+    // overflow
     if (sym_index >= MAX_SYMBOL_TABLE_SIZE) {
         fprintf(stderr, "Error: Symbol table overflow.\n");
         return -1;
     }
+    // duplicate check
     if (find_symbol(name, level) != -1) {
-        printf("hit error 3\n");
         error(3);
         return -1;
     }
 
+    // add symbol to table
     sym_table[sym_index].kind = kind;
     strncpy(sym_table[sym_index].name, name, MAX_IDENT_LEN);
     sym_table[sym_index].name[MAX_IDENT_LEN - 1] = '\0';
@@ -295,39 +310,46 @@ int add_symbol(int kind, const char *name, int val, int level, int addr) {
     sym_table[sym_index].level = level;
     sym_table[sym_index].addr = addr;
 
-    printf("incrementing sym index\n");
-    return sym_index++;
+    return sym_index++; // increment symbol index upon return
 }
 
-void program() {
-    emit(JMP, 0, 0);
-    
-    int data_size;
-    block(0, &data_size);
 
+// GRAMMAR DEFINITIONS AND PARSING FUNCTIONS
+
+
+void program() {
+    emit(JMP, 0, 0); // hardcoded jump to main block start
+    
+    int data_size; // initialize data size
+    block(0, &data_size); // parse main block at level 0
+
+    // ensure program ends with period
     if (current_token != periodsym) {
         error(16);
     }
     
-    emit(SYS, 0, 3);
-    
-    code[0].m = code_index; 
+    emit(SYS, 0, 3); // halt instruction
+
+    code[0].m = code_index; // backpatch jump to main block start
 }
 
+
 void block(int level, int *data_size) {
-    *data_size = 3; 
+    *data_size = 3; // reserve space for static link, dynamic link, return address
     const_declaration(level);
     var_declaration(level, data_size);
 
-    emit(INC, 0, *data_size);
+    emit(INC, 0, *data_size); // allocate space for variables
 
     statement(level);
 }
+
 
 void const_declaration(int level) {
     if (current_token == constsym) {
         advance_token();
         
+        // process constant declarations
         do {
             if (current_token != identsym) {
                 error(2);
@@ -346,7 +368,6 @@ void const_declaration(int level) {
             }
             int val = current_number_val;
             
-            printf("Adding constant: %s = %d\n", ident_name, val);
             add_symbol(CONSTANT, ident_name, val, level, 0);
             
             advance_token();
