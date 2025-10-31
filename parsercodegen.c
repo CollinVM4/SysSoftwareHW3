@@ -113,6 +113,7 @@ int find_symbol(const char *name, int kind);
 int add_symbol(int kind, const char *name, int val, int level, int addr);
 void print_assembly_code();
 void print_symbol_table();
+void mark_all_symbols();
 void block(int level, int *data_size);
 void const_declaration(int level);
 void var_declaration(int level, int *data_size);
@@ -242,7 +243,8 @@ void print_assembly_code() {
     // mnemonic def for opcodes
     char *opname[] = {"", "LIT", "OPR", "LOD", "STO", "CAL", "INC", "JMP", "JPC", "SYS"};
     
-    // printf("\nGenerated Assembly Code:\n");
+    // Print column header
+    printf("Line OP L M\n");
     // loop through code array and print instructions
     for (int i = 0; i < code_index; i++) {
         printf("%3d %s %d %d\n", i, opname[code[i].op], code[i].l, code[i].m);
@@ -264,6 +266,14 @@ void print_symbol_table() {
                sym_table[i].level, sym_table[i].addr);
     }
     printf("\n");
+}
+
+
+// function to mark all symbols as used (set mark to 1)
+void mark_all_symbols() {
+    for (int i = 0; i < sym_index; i++) {
+        sym_table[i].mark = 1;
+    }
 }
 
 
@@ -318,7 +328,7 @@ int add_symbol(int kind, const char *name, int val, int level, int addr) {
 
 
 void program() {
-    emit(JMP, 0, 0); // hardcoded jump to main block start
+    emit(JMP, 0, 3); // Jump to address 3 per HW3 spec requirement
     
     int data_size; // initialize data size
     block(0, &data_size); // parse main block at level 0
@@ -329,8 +339,6 @@ void program() {
     }
     
     emit(SYS, 0, 3); // halt instruction
-
-    code[0].m = code_index; // backpatch jump to main block start
 }
 
 
@@ -414,7 +422,6 @@ void statement(int level) {
         char ident_name[MAX_IDENT_LEN];
         strcpy(ident_name, current_lexeme);
         sym_idx = find_symbol(ident_name, level);
-        printf("sym_idx for %s: %d\n", ident_name, sym_idx);
 
         if (sym_idx == -1) {
             error(7);
@@ -515,10 +522,10 @@ void statement(int level) {
 
 
 void condition(int level) {
-    if (current_token == skipsym) {
+    if (current_token == evensym) {
         advance_token();
         expression(level);
-        emit(OPR, 0, 6);
+        emit(OPR, 0, 11);  // EVEN per ISA Table 2
     } else {
         expression(level); // left-hand side
         
@@ -531,13 +538,14 @@ void condition(int level) {
         expression(level); // right-hand side
 
         // Emit appropriate OPR instruction based on relational operator
+        // Per ISA Table 2: EQL=5, NEQ=6, LSS=7, LEQ=8, GTR=9, GEQ=10
         switch (rel_op) {
-            case eqlsym:  emit(OPR, 0, 8); break;
-            case neqsym: emit(OPR, 0, 9); break;
-            case lessym: emit(OPR, 0, 10); break;
-            case leqsym: emit(OPR, 0, 11); break;
-            case gtrsym: emit(OPR, 0, 12); break;
-            case geqsym: emit(OPR, 0, 13); break;
+            case eqlsym:  emit(OPR, 0, 5); break;  // EQL
+            case neqsym:  emit(OPR, 0, 6); break;  // NEQ
+            case lessym:  emit(OPR, 0, 7); break;  // LSS
+            case leqsym:  emit(OPR, 0, 8); break;  // LEQ
+            case gtrsym:  emit(OPR, 0, 9); break;  // GTR
+            case geqsym:  emit(OPR, 0, 10); break; // GEQ
         }
     }
 }
@@ -545,26 +553,16 @@ void condition(int level) {
 
 void expression(int level) {
     int op;
-    // Handle optional leading + or -
-    if (current_token == plussym || current_token == minussym) {
-        op = current_token;
-        advance_token();
-        term(level);
-        if (op == minussym) {
-            emit(OPR, 0, 1);
-        }
-    } else {
-        term(level);
-    }
+    term(level);
     // Handle addition and subtraction
     while (current_token == plussym || current_token == minussym) {
         op = current_token;
         advance_token();
         term(level);
         if (op == plussym) {
-            emit(OPR, 0, 2);
+            emit(OPR, 0, 1);  // ADD per ISA Table 2
         } else {
-            emit(OPR, 0, 3);
+            emit(OPR, 0, 2);  // SUB per ISA Table 2
         }
     }
 }
@@ -579,9 +577,9 @@ void term(int level) {
         advance_token();
         factor(level);
         if (op == multsym) {
-            emit(OPR, 0, 4);
+            emit(OPR, 0, 3);  // MUL per ISA Table 2
         } else {
-            emit(OPR, 0, 5);
+            emit(OPR, 0, 4);  // DIV per ISA Table 2
         }
     }
 }
@@ -629,11 +627,11 @@ int main(void) {
     }
 
     read_token_list(); // Load tokens from file
-    printf("Tokens loaded:\n");
-    // Print loaded tokens for debugging
-    for (int i = 0; i < token_count; i++) {
-        printf("%2d: token=%2d lexeme='%s'\n", i, token_list[i], token_lexeme[i]);
-    }
+    // printf("Tokens loaded:\n");
+    // // Print loaded tokens for debugging
+    // for (int i = 0; i < token_count; i++) {
+    //     printf("%2d: token=%2d lexeme='%s'\n", i, token_list[i], token_lexeme[i]);
+    // }
     // Check if any tokens were read
     if (token_count == 0) {
         fprintf(stderr, "Error: Token input file '%s' is empty or invalid.\n", TOKEN_FILENAME);
@@ -651,6 +649,7 @@ int main(void) {
     program(); // Start parsing
 
     if (!error_flag) {
+        mark_all_symbols(); // Mark all symbols as used before exit
         print_symbol_table();
         print_assembly_code();
         write_code_to_file();
