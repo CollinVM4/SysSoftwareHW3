@@ -66,7 +66,7 @@ enum symbol_kind {
 
 // Struct Definitions
 typedef struct {
-    int kind;        // const = 1, var = 2, proc = 3
+    int kind;        // const = 1, var = 2
     char name[MAX_IDENT_LEN];   // symbol name
     int val;         // value for constants
     int level;       // scope level
@@ -404,7 +404,8 @@ void var_declaration(int level, int *data_size) {
         advance_token();
     }
 }
-// --- PARSER FUNCTIONS ---
+
+
 void statement(int level) {
     int sym_idx;
     int cx1, cx2;
@@ -512,6 +513,7 @@ void statement(int level) {
     }
 }
 
+
 void condition(int level) {
     if (current_token == skipsym) {
         advance_token();
@@ -540,6 +542,7 @@ void condition(int level) {
     }
 }
 
+
 void expression(int level) {
     int op;
     // Handle optional leading + or -
@@ -566,6 +569,7 @@ void expression(int level) {
     }
 }
 
+
 void term(int level) {
     int op;
     factor(level);
@@ -581,6 +585,7 @@ void term(int level) {
         }
     }
 }
+
 
 void factor(int level) {
     int sym_idx;
@@ -614,8 +619,8 @@ void factor(int level) {
     }
 }
 
-// --- MAIN FUNCTION ---
 
+// --- MAIN FUNCTION ---
 int main(void) {
     code_file = fopen(CODE_FILENAME, "w"); // Open output file
     if (!code_file) { // Check for file open error
